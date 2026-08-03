@@ -1,35 +1,48 @@
-local rla = peripheral.wrap("back")
+local rla = peripheral.wrap("back") -- Укажи свою сторону
 if not rla then error("Reactor adapter not found!") end
 
-local step = 5
-local minStep = 0.1
 local lastEff = 0
 local dir = 1
+local step = 1
+local emergencyDrop = 5.0 -- Порог падения efficiency (%) для срабатывания защиты
+local emergencyJump = -5  -- На сколько единиц резко сбросить reactivity
 
 term.clear()
 term.setCursorPos(1, 1)
-print("Auto-Tuner running...")
+print("Auto-Tuner with Safety Guard running...")
 
 while true do
   local curEff = rla.getEfficiency() or 0
 
   if curEff > 0 then
-    if curEff < lastEff then
-      dir = -dir
-      step = math.max(minStep, step * 0.5)
-    elseif curEff > lastEff and step < 5 then
-      step = math.min(5, step * 1.2)
+    -- Проверка на экстренный сброс (резкий обвал эффективности)
+    if (lastEff - curEff) > emergencyDrop and lastEff > 0 then
+      rla.adjustReactivity(emergencyJump)
+      dir = -1
+      term.setCursorPos(1, 4)
+      term.clearLine()
+      term.write("STATUS: EMERGENCY DROP DETECTED! Jumped " .. emergencyJump)
+    else
+      -- Стандартная логика подстройки
+      if curEff < lastEff then
+        dir = -dir
+      end
+      rla.adjustReactivity(dir * step)
+      
+      term.setCursorPos(1, 4)
+      term.clearLine()
+      term.write("STATUS: Normal tuning")
     end
 
-    rla.adjustReactivity(dir * step)
     lastEff = curEff
   else
-    rla.adjustReactivity(1)
+    -- Если эффективность упала в 0, сразу сбрасываем реактивность вниз
+    rla.adjustReactivity(-5)
   end
 
   term.setCursorPos(1, 3)
   term.clearLine()
-  term.write(string.format("Eff: %.2f%% | Step: %+.2f", curEff, dir * step))
+  term.write(string.format("Eff: %.2f%% | Dir: %s", curEff, dir > 0 and "+1" or "-1"))
 
-  os.sleep(3)
+  os.sleep(5)
 end
